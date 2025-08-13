@@ -30,10 +30,91 @@ cat > luax.sh << 'EOF'
 # LuaX - Script de configuração do sistema Ubuntu, abandonando sudo
 # Autor: @0xffff00 (Instagram)
 
-# Verifica se o script está sendo executado com privilégios de root
+# Verifica argumentos para desinstalação
+if [ "$1" = "-u" ]; then
+  echo "Iniciando desinstalação do LuaX..."
+
+  # Restaurar sudo e desabilitar conta root
+  echo "Restaurando configurações do sudo e desabilitando conta root..."
+  passwd -l root
+  if [ $? -eq 0 ]; then
+    echo "Conta root desabilitada."
+cp "$BASHRC_FILE" "$BASHRC_FILE.bak"
+echo "Backup do .bashrc criado em $BASHRC_FILE.bak"
+
+  else
+    echo "Erro ao desabilitar conta root. Verifique manualmente."
+    exit 1
+  fi
+
+  # Restaurar permissões originais
+  USER_HOME="/home/$SUDO_USER"
+  echo "Restaurando permissões padrão para $SUDO_USER..."
+  chown -R root:root /usr/local/bin /usr/local/lib /etc/apt
+  chmod -R 755 /usr/local/bin /usr/local/lib /etc/apt
+  PYTHON_LIB_DIR="/usr/local/lib/python3.$(python3 -c 'import sys; print(sys.version_info.minor)')"
+  chmod -R 755 "$PYTHON_LIB_DIR"
+  gpasswd -d "$SUDO_USER" root
+  echo "Permissões restauradas."
+
+  # Restaurar .bashrc
+  if [ -f "$USER_HOME/.bashrc.bak" ]; then
+    mv "$USER_HOME/.bashrc.bak" "$USER_HOME/.bashrc"
+    echo "Arquivo .bashrc restaurado a partir do backup."
+  fi
+
+  # Remover configurações do apt
+  APT_CONF="/etc/apt/apt.conf.d/99luax"
+  if [ -f "$APT_CONF" ]; then
+    rm -f "$APT_CONF"
+    echo "Configurações do apt restauradas."
+  fi
+
+  # Remover configurações do pip
+  PIP_CONF="/etc/pip.conf"
+  if [ -f "$PIP_CONF" ]; then
+    rm -f "$PIP_CONF"
+    echo "Configurações do pip restauradas."
+  fi
+
+  # Reativar AppArmor
+  if [ -f "/etc/apparmor.d/tunables" ]; then
+    systemctl enable apparmor
+    systemctl start apparmor
+    echo "AppArmor reativado."
+  else
+    echo "AppArmor não encontrado. Pulando reativação."
+  fi
+
+  # Reativar UFW
+  if command -v ufw >/dev/null; then
+    ufw enable
+    echo "UFW (firewall) reativado."
+  else
+    echo "UFW não encontrado. Pulando reativação."
+  fi
+
+  # Remover script LuaX
+  if [ -f "/usr/local/bin/luax" ]; then
+    rm -f "/usr/local/bin/luax"
+    echo "Script LuaX removido de /usr/local/bin/luax."
+  fi
+
+  # Remover aliases
+  sed -i '/# Aliases do LuaX para comandos sem sudo/d' "$USER_HOME/.bashrc"
+  sed -i '/alias apt=/d' "$USER_HOME/.bashrc"
+  sed -i '/alias npm=/d' "$USER_HOME/.bashrc"
+  sed -i '/alias pip3=/d' "$USER_HOME/.bashrc"
+  echo "Aliases removidos do .bashrc."
+
+  echo "Desinstalação concluída. Sistema restaurado."
+  echo "Execute 'source ~/.bashrc' ou reinicie o terminal para aplicar as mudanças."
+  exit 0
+fi
+
+# Executar automaticamente como root, sem necessidade de sudo
 if [ "$EUID" -ne 0 ]; then
-  echo "Este script precisa ser executado como root. Use sudo ./luax.sh"
-  exit 1
+  exec sudo "$0" "$@"
 fi
 
 # Nome do script
